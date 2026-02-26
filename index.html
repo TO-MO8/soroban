@@ -1,0 +1,1280 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>そろばん訓練ゲーム（桁数/見取り算/級プリセット）</title>
+  <style>
+    /* padding を増やしても input がはみ出さず、数字が見えなくならないように */
+    *, *::before, *::after{ box-sizing: border-box; }
+
+    :root{
+      --bg:#0b1020; --panel:#111a35;
+      --text:#e9eeff; --muted:#aab3d6; --line:rgba(255,255,255,.10);
+      --good:#7CFF9B; --bad:#FF6B6B; --accent:#74b3ff;
+      --bead2:#e4a96a; --beadActive:#ffdfb8;
+    }
+    html,body{height:100%; margin:0; background:radial-gradient(1100px 700px at 15% 10%, #1b2a6a, var(--bg));
+      color:var(--text); font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Noto Sans JP","Hiragino Kaku Gothic ProN","Meiryo",sans-serif;}
+    .wrap{min-height:100%; display:grid; place-items:center; padding:16px;}
+    .app{width:min(1180px, 100%); display:grid; grid-template-columns: 1.25fr .75fr; gap:14px;}
+    .card{background:rgba(17,26,53,.78); border:1px solid var(--line); border-radius:18px; box-shadow:0 18px 40px rgba(0,0,0,.35);}
+    .main{padding:16px;}
+    .side{padding:14px;}
+    h1{margin:0 0 10px; font-size:18px; letter-spacing:.3px}
+    .row{display:flex; gap:10px; flex-wrap:wrap; align-items:center;}
+    .pill{display:inline-block; padding:2px 10px; border-radius:999px; font-size:12px; border:1px solid var(--line); color:var(--muted);}
+    .big{margin-top:10px; background:rgba(0,0,0,.18); border:1px solid var(--line); border-radius:16px; padding:12px;}
+    .target{font-size:44px; font-weight:900; letter-spacing:1px; font-variant-numeric:tabular-nums; text-shadow:0 10px 35px rgba(0,0,0,.45);}
+    .sub{color:var(--muted); font-size:12px; margin-top:6px; line-height:1.5;}
+    .btns{display:flex; gap:10px; margin-top:12px;}
+    button{flex:1; padding:12px; border-radius:14px; border:1px solid var(--line); background:rgba(0,0,0,.18); color:var(--text); cursor:pointer; font-weight:800;}
+    button:hover{background:rgba(255,255,255,.06);}
+    button.primary{background:rgba(116,179,255,.18); border-color:rgba(116,179,255,.35);}
+    button.danger{background:rgba(255,107,107,.12); border-color:rgba(255,107,107,.30);}
+    button:disabled{opacity:.45; cursor:not-allowed;}
+    .result{margin-top:12px; padding:12px; border-radius:14px; border:1px solid var(--line); background:rgba(0,0,0,.18); display:none;}
+    .result.good{border-color:rgba(124,255,155,.35); background:rgba(124,255,155,.08);}
+    .result.bad{border-color:rgba(255,107,107,.35); background:rgba(255,107,107,.08);}
+    .result b{font-variant-numeric: tabular-nums;}
+
+    .controls{margin-top:10px; display:grid; grid-template-columns: 1.05fr .85fr .85fr .85fr .85fr; gap:10px;}
+    .field{background:rgba(0,0,0,.18); border:1px solid var(--line); border-radius:14px; padding:10px;}
+    label{display:block; font-size:12px; color:var(--muted); margin-bottom:6px;}
+    select,input{width:100%; border:1px solid var(--line); background:rgba(0,0,0,.22); color:var(--text);
+      border-radius:12px; padding:10px; font-size:14px; outline:none;}
+    /* number input: 値が必ず見えるように（スピナーを消してレイアウト崩れ防止） */
+.numRow{display:flex; gap:8px;}
+.numRow input{flex:1; min-width:84px;}
+input[type="number"]{
+  font-variant-numeric: tabular-nums;
+  padding-right: 12px;
+  text-align: center;
+  color: var(--text) !important;
+  caret-color: var(--text);
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button{
+  -webkit-appearance: auto;
+  margin: 0;
+}
+
+input[type="number"]{ -moz-appearance: auto; appearance: auto; }
+
+    /* ===== Soroban (more realistic look) ===== */
+    .sorobanWrap{
+      margin-top:14px;
+      border-radius:20px;
+      padding:16px 12px;
+
+      /* deep lacquered wood + subtle grain */
+      background:
+        radial-gradient(1200px 420px at 20% 0%, rgba(255,255,255,.14), rgba(255,255,255,0) 55%),
+        radial-gradient(900px 520px at 80% 120%, rgba(0,0,0,.45), rgba(0,0,0,0) 55%),
+        repeating-linear-gradient(
+          90deg,
+          rgba(255,255,255,.05) 0px,
+          rgba(255,255,255,.02) 6px,
+          rgba(0,0,0,.06) 12px,
+          rgba(255,255,255,.02) 18px
+        ),
+        linear-gradient(180deg, rgba(54,34,20,.92), rgba(26,18,12,.92));
+      border:1px solid rgba(255,255,255,.10);
+      box-shadow:
+        0 18px 46px rgba(0,0,0,.45),
+        inset 0 1px 0 rgba(255,255,255,.12),
+        inset 0 -16px 28px rgba(0,0,0,.35);
+    }
+    .soroban{
+      display:grid;
+      gap:8px;
+      user-select:none;
+    }
+
+    /* each column channel */
+    .rod{
+      position:relative;
+      height:380px;
+      overflow:hidden;
+      border-radius:16px;
+
+      background:
+        radial-gradient(120px 520px at 50% 50%, rgba(255,255,255,.06), rgba(255,255,255,0) 60%),
+        linear-gradient(180deg, rgba(0,0,0,.16), rgba(255,255,255,.04)),
+        linear-gradient(180deg, rgba(36,24,16,.70), rgba(22,16,12,.70));
+      border:1px solid rgba(255,255,255,.07);
+      box-shadow:
+        inset 0 10px 22px rgba(0,0,0,.35),
+        inset 0 -10px 18px rgba(255,255,255,.03);
+    }
+
+    /* the central rod (metal/wood pin) */
+    .rod::after{
+      content:"";
+      position:absolute;
+      left:50%;
+      top:10px;
+      bottom:10px;
+      width:4px;
+      transform:translateX(-50%);
+      border-radius:999px;
+      background:
+        linear-gradient(90deg,
+          rgba(0,0,0,.40),
+          rgba(255,255,255,.18),
+          rgba(0,0,0,.26)
+        );
+      box-shadow:
+        inset 0 0 0 1px rgba(255,255,255,.12),
+        0 2px 10px rgba(0,0,0,.35);
+      z-index:1;
+    }
+
+    /* divider beam */
+    .bar{
+      position:absolute;
+      left:8%;
+      right:8%;
+      top:50%;
+      height:12px;
+      transform:translateY(-50%);
+      border-radius:999px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.18), rgba(0,0,0,.35)),
+        linear-gradient(90deg, rgba(210,170,120,.75), rgba(160,120,80,.80));
+      border:1px solid rgba(255,255,255,.10);
+      box-shadow:
+        0 12px 22px rgba(0,0,0,.36),
+        inset 0 1px 0 rgba(255,255,255,.20),
+        inset 0 -2px 6px rgba(0,0,0,.35);
+      z-index:2;
+    }
+    .bar::after{
+      content:"";
+      position:absolute;
+      left:10px; right:10px; top:50%;
+      height:1px; transform:translateY(-50%);
+      background:rgba(255,255,255,.20);
+      opacity:.55;
+      border-radius:999px;
+    }
+
+    /* bead: wood, pointy sides, flat top/bottom (front hole is NOT visible) */
+    .bead{
+      position:absolute;
+      left:50%;
+      transform:translateX(-50%);
+      width:56px;
+      height:26px;
+
+      /* Bead shape closer to real soroban:
+         - top is a bit narrower
+         - bottom is a bit wider
+         - sides are pointy (but not "carved-in")
+         - top/bottom are flat */
+      /* Sharper side angles but FLAT top/bottom so it doesn't look pointy up/down */
+      clip-path: polygon(
+        2% 50%,
+        34% 14%,
+        66% 14%,
+        98% 50%,
+        66% 86%,
+        34% 86%
+      );
+      border-radius:8px;
+
+      /* wood-ish shading */
+      background:
+        /* subtle top highlight */
+        radial-gradient(34px 18px at 42% 28%, rgba(255,255,255,.20), rgba(255,255,255,0) 62%),
+        /* gentle bottom shade */
+        radial-gradient(44px 22px at 68% 78%, rgba(0,0,0,.38), rgba(0,0,0,0) 65%),
+        /* side depth */
+        linear-gradient(90deg,
+          rgba(0,0,0,.26),
+          rgba(255,255,255,.10),
+          rgba(0,0,0,.22)
+        ),
+        /* overall tone */
+        linear-gradient(180deg, rgba(255,255,255,.16), rgba(0,0,0,.34)),
+        var(--bead2);
+
+      border:1px solid rgba(255,255,255,.10);
+      box-shadow:
+        0 10px 18px rgba(0,0,0,.35),
+        inset 0 2px 4px rgba(255,255,255,.10),
+        inset 0 -4px 10px rgba(0,0,0,.38);
+      cursor:pointer;
+      display:grid;
+      place-items:center;
+      font-size:12px;
+      color:rgba(0,0,0,.34);
+      z-index:3;
+      transition: top 140ms ease, filter 140ms ease, transform 140ms ease;
+    }
+
+    /* little stem above the upper bead so it looks "threaded" on the rod (like the photo) */ above the upper bead so it looks "threaded" on the rod (like the photo) */
+    .upperBead::before{
+      content:"";
+      position:absolute;
+      left:50%;
+      bottom:100%;
+      width:10px;
+      height:16px;
+      transform:translateX(-50%);
+      border-radius:6px;
+      background:
+        linear-gradient(90deg,
+          rgba(0,0,0,.22),
+          rgba(255,255,255,.10),
+          rgba(0,0,0,.18)
+        ),
+        linear-gradient(180deg, rgba(255,255,255,.18), rgba(0,0,0,.28)),
+        var(--bead2);
+      border:1px solid rgba(255,255,255,.10);
+      box-shadow:
+        0 6px 10px rgba(0,0,0,.28),
+        inset 0 1px 2px rgba(255,255,255,.10);
+      z-index:4;
+      pointer-events:none;
+    }
+
+    .bead::after{
+      /* thin mid-line like the real beads (photo) */
+      content:"";
+      position:absolute;
+      left:0px;
+      right:0px;
+      top:calc(50% - 1px);
+      height:1px;
+      border-radius:999px;
+      background:rgba(255,255,255,.16);
+      box-shadow:
+        inset 0 -1px 0 rgba(0,0,0,.28),
+        0 1px 0 rgba(0,0,0,.18);
+      pointer-events:none;
+      opacity:.95;
+    }
+    .bead.active{
+      background:
+        radial-gradient(12px 10px at 35% 35%, rgba(255,255,255,.32), rgba(255,255,255,0) 60%),
+        radial-gradient(22px 18px at 70% 70%, rgba(0,0,0,.32), rgba(0,0,0,0) 62%),
+        linear-gradient(180deg, rgba(255,255,255,.20), rgba(0,0,0,.22)),
+        var(--beadActive);
+      border-color:rgba(255,255,255,.16);
+      filter:saturate(1.08) brightness(1.03);
+      transform:translateX(-50%) scale(1.01);
+    }
+
+    .digitLabel{
+      position:absolute;
+      bottom:8px;
+      left:0;
+      right:0;
+      text-align:center;
+      color:rgba(233,238,255,.72);
+      font-size:12px;
+      text-shadow:0 1px 0 rgba(0,0,0,.35);
+      z-index:4;
+      pointer-events:none;
+    }
+
+
+    .stats{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px;}
+    .stat{background:rgba(0,0,0,.18); border:1px solid var(--line); border-radius:14px; padding:10px;}
+    .stat .k{font-size:12px; color:var(--muted);}
+    .stat .v{font-size:18px; font-weight:900; margin-top:4px; font-variant-numeric:tabular-nums;}
+    .hint{color:var(--muted); font-size:12px; line-height:1.55; margin-top:10px;}
+    .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;}
+
+    .log{margin-top:12px; background:rgba(0,0,0,.18); border:1px solid var(--line); border-radius:14px; padding:10px; height:220px; overflow:auto;}
+    .logline{font-family:ui-monospace, monospace; font-size:12px; color:rgba(233,238,255,.85); padding:6px 6px; border-bottom:1px dashed rgba(255,255,255,.08);}
+    .logline:last-child{border-bottom:none;}
+  
+
+  /* ===== FIX: number input spinners (arrows) enable + keep digits visible ===== */
+  input[type="number"]{
+    box-sizing: border-box;
+    padding-right: 40px; /* room for spinner */
+    text-align: center;
+    color: var(--text) !important;
+    caret-color: var(--text);
+    -moz-appearance: auto;
+    appearance: auto;
+  }
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button{
+    -webkit-appearance: auto;
+    margin: 0;
+  }
+
+
+    /* ===== Soroban v15: photo-like frame & diamond beads ===== */
+    .sorobanWrap{
+      padding: 10px 8px; /* outer breathing room only */
+      background: none; border: none; box-shadow: none;
+    }
+    .sorobanFrame{
+      position:relative;
+      border-radius: 14px;
+      padding: 18px 18px;
+      background:
+        radial-gradient(900px 400px at 20% 15%, rgba(255,255,255,.10), rgba(255,255,255,0) 55%),
+        radial-gradient(900px 600px at 80% 120%, rgba(0,0,0,.55), rgba(0,0,0,0) 60%),
+        linear-gradient(180deg, #15171c, #0b0c10);
+      border: 4px solid rgba(0,0,0,.65);
+      box-shadow:
+        0 18px 46px rgba(0,0,0,.55),
+        inset 0 1px 0 rgba(255,255,255,.10),
+        inset 0 -18px 28px rgba(0,0,0,.55);
+    }
+    /* inner tray (matte) */
+    .sorobanInner{
+      position:relative;
+      border-radius: 10px;
+      padding: 16px 14px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.06), rgba(0,0,0,.18)),
+        radial-gradient(1200px 400px at 50% 10%, rgba(255,255,255,.06), rgba(255,255,255,0) 55%),
+        linear-gradient(180deg, #2a2d34, #1b1d23);
+      border:1px solid rgba(255,255,255,.10);
+      box-shadow: inset 0 10px 24px rgba(0,0,0,.45);
+    }
+
+    /* one horizontal beam across all columns */
+    .sorobanInner::after{
+      content:"";
+      position:absolute;
+      left:10px; right:10px;
+      /* photo-like balance: the beam sits a bit higher (top area smaller, bottom area larger) */
+      top:38%;
+      height:10px;
+      transform:translateY(-50%);
+      border-radius: 999px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.14), rgba(0,0,0,.30)),
+        linear-gradient(90deg, rgba(210,210,210,.55), rgba(110,110,110,.65));
+      box-shadow:
+        0 10px 18px rgba(0,0,0,.45),
+        inset 0 1px 0 rgba(255,255,255,.10);
+      border:1px solid rgba(0,0,0,.35);
+      pointer-events:none;
+      z-index: 2;
+    }
+
+    .soroban{
+      display:grid;
+      gap: 10px;
+      user-select:none;
+    }
+
+    /* make each column look like a slot, not an individual card */
+    .rod{
+      position:relative;
+      height: 360px;
+      border: none;
+      background: transparent !important;
+      box-shadow: none !important;
+      overflow: visible;
+    }
+    /* slot / channel */
+    .rod::before{
+      content:"";
+      position:absolute;
+      left:50%;
+      top:10px;
+      bottom:28px;
+      width: 54px;
+      transform: translateX(-50%);
+      border-radius: 12px;
+      background:
+        radial-gradient(50px 260px at 50% 35%, rgba(255,255,255,.06), rgba(255,255,255,0) 62%),
+        linear-gradient(180deg, rgba(0,0,0,.35), rgba(255,255,255,.05)),
+        linear-gradient(180deg, rgba(30,32,38,.92), rgba(18,20,25,.92));
+      border:1px solid rgba(255,255,255,.10);
+      box-shadow:
+        inset 0 10px 18px rgba(0,0,0,.45),
+        inset 0 -10px 18px rgba(255,255,255,.04);
+      z-index: 0;
+    }
+    /* vertical rod */
+    .rod::after{
+      content:"";
+      position:absolute;
+      left:50%;
+      top:16px;
+      bottom:34px;
+      width: 6px;
+      transform: translateX(-50%);
+      border-radius: 999px;
+      background:
+        linear-gradient(90deg, rgba(0,0,0,.45), rgba(255,255,255,.18), rgba(0,0,0,.35));
+      box-shadow:
+        inset 0 0 0 1px rgba(255,255,255,.10),
+        0 2px 10px rgba(0,0,0,.45);
+      z-index: 1;
+    }
+
+    /* hide per-rod bar (we draw global bar) */
+    .rod .bar{ display:none !important; }
+
+    /* === Bead (v17)
+       - 茶色で描いたような「線のところが尖がってる」感じ（左右が尖って中央がくびれる）
+       - 上下はフラット
+       - 赤丸（穴の丸）は不要なので削除
+       - 高さを少し縮めて重なりにくく
+    */
+    .bead{
+      position:absolute;
+      left:50%;
+      transform: translateX(-50%);
+      width: 48px;
+      height: 24px;
+      border-radius: 10px; /* fallback */
+      /* Sharper side angles but FLAT top/bottom so it doesn't look pointy up/down */
+      clip-path: polygon(
+        2% 50%,
+        34% 14%,
+        66% 14%,
+        98% 50%,
+        66% 86%,
+        34% 86%
+      );
+      background:
+        radial-gradient(12px 10px at 35% 28%, rgba(255,255,255,.22), rgba(255,255,255,0) 70%),
+        radial-gradient(22px 14px at 72% 80%, rgba(0,0,0,.35), rgba(0,0,0,0) 72%),
+        repeating-linear-gradient(90deg, rgba(255,255,255,.05) 0px, rgba(255,255,255,.02) 3px, rgba(0,0,0,.05) 6px),
+        linear-gradient(180deg, rgba(255,255,255,.10), rgba(0,0,0,.26)),
+        linear-gradient(180deg, #d07b37, #a85722);
+      border: 1px solid rgba(0,0,0,.35);
+      box-shadow:
+        0 10px 16px rgba(0,0,0,.40),
+        inset 0 2px 3px rgba(255,255,255,.10);
+      color: transparent; /* hide "1" / "5" text */
+      text-shadow:none;
+      z-index: 3;
+      cursor:pointer;
+    }
+    .bead::after{
+      /* thin mid-line like the real beads (photo) */
+      content:"";
+      position:absolute;
+      left:0px;
+      right:0px;
+      top:calc(50% - 1px);
+      height:2px;
+      border-radius:999px;
+      background:rgba(255,255,255,.16);
+      box-shadow:
+        inset 0 -1px 0 rgba(0,0,0,.28),
+        0 1px 0 rgba(0,0,0,.18);
+      pointer-events:none;
+      opacity:.95;
+    }
+    .bead.active{
+      filter: brightness(1.12) saturate(1.05);
+      box-shadow:
+        0 12px 18px rgba(0,0,0,.48),
+        inset 0 2px 3px rgba(255,255,255,.12);
+    }
+
+    /* place labels */
+    .digitLabel{
+      position:absolute;
+      left:50%;
+      transform:translateX(-50%);
+      bottom:0;
+      font-size:12px;
+      color: rgba(233,238,255,.72);
+      text-shadow: 0 6px 14px rgba(0,0,0,.55);
+      z-index: 5;
+    }
+
+    /* responsive tweaks */
+    @media (max-width: 980px){
+      .rod{ height: 320px; }
+      .bead{ width: 44px; height: 24px; }
+      .rod::before{ width: 50px; }
+    }
+
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="app">
+    <div class="card main">
+      <div class="row" style="justify-content:space-between">
+        <h1>🧮 そろばん訓練ゲーム</h1>
+        <span class="pill" id="statePill">待機中</span>
+      </div>
+
+      <div class="controls">
+        <div class="field">
+          <label>モード</label>
+          <select id="mode">
+            <option value="match">数字合わせ（出題の数を作る）</option>
+            <option value="mitori">見取り算（＋/−を流して追う）</option>
+            <option value="yomiage">読み上げ算（○○円を読み上げ）</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>問題の桁数（表示は9桁固定）</label>
+          <select id="digits">
+            <option value="1">1桁</option>
+            <option value="2">2桁</option>
+            <option value="3">3桁</option>
+            <option value="5">5桁</option>
+            <option value="7" selected>7桁</option>
+            <option value="9">9桁</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>級プリセット（見取り算用）</label>
+          <select id="grade">
+            <option value="custom" selected>カスタム</option>
+            <option value="10">10級</option><option value="9">9級</option><option value="8">8級</option>
+            <option value="7">7級</option><option value="6">6級</option><option value="5">5級</option>
+            <option value="4">4級</option><option value="3">3級</option>
+            <option value="2">2級</option><option value="1">1級</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>符号</label>
+          <select id="opMode" title="足し算だけ / 足し引き">
+            <option value="add">足し算だけ</option>
+            <option value="addsub" selected>足し算＋引き算</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>見取り算/読み上げ：表示(ms) / 口数</label>
+          <div class="numRow">
+            <input id="speed" type="number" min="150" max="3000" step="10" value="650" title="表示/読み上げ間隔(ms)">
+            <input id="terms" type="number" min="2" max="60" step="1" value="12" title="口数">
+          </div>
+          <div style="display:flex; gap:8px; margin-top:8px; align-items:center;">
+            <label style="margin:0; flex:1; color:var(--muted); font-size:12px;">
+              <input id="voiceOn" type="checkbox" checked style="width:auto; vertical-align:middle; margin-right:6px;">
+              音声読み上げ
+            </label>
+            <select id="unit" title="単位" style="flex:1;">
+              <option value="yen" selected>円</option>
+              <option value="none">なし</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="big">
+        <div class="target mono" id="display">0</div>
+        <div class="sub" id="sub">モードを選んで「開始」。珠をクリックして動かし、Enterで判定できます。</div>
+      </div>
+
+      <div class="btns">
+        <button class="primary" id="startBtn">開始（新しい問題）</button>
+        <button id="checkBtn">判定（Enter）</button>
+        <button class="danger" id="resetBtn">全部0に戻す（R）</button>
+      </div>
+
+      <div style="display:flex; gap:10px; align-items:center; margin-top:10px; flex-wrap:wrap;">
+        <label style="margin:0; color:var(--muted); font-size:12px; display:flex; align-items:center; gap:8px;">
+          <input id="autoNext" type="checkbox" checked style="width:auto;">
+          判定後 自動で次の問題へ
+        </label>
+        <div style="display:flex; align-items:center; gap:8px; min-width:240px;">
+          <span style="color:var(--muted); font-size:12px;">待ち</span>
+          <input id="autoNextDelay" type="number" min="0" max="5000" step="100" value="900" style="width:110px;">
+          <span style="color:var(--muted); font-size:12px;">ms</span>
+        </div>
+      </div>
+
+      <div class="result" id="result"></div>
+
+      <div class="sorobanWrap">
+        <div class="sorobanFrame">
+          <div class="sorobanInner">
+            <div class="soroban" id="soroban"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="hint">
+        キー：<span class="pill">Enter</span> 判定 / <span class="pill">N</span> 新問題 / <span class="pill">R</span> 0に戻す /
+        <span class="pill">P</span> 一時停止（見取り算/読み上げ中） / <span class="pill">Space</span> 早送り（見取り算/読み上げ中） / <span class="pill">Esc</span> 中断
+      </div>
+    </div>
+
+    <div class="card side">
+      <h1 style="margin:0 0 6px;">成績</h1>
+      <div class="stats">
+        <div class="stat"><div class="k">連続正解</div><div class="v" id="streak">0</div></div>
+        <div class="stat"><div class="k">正解/回</div><div class="v"><span id="correct">0</span>/<span id="attempts">0</span></div></div>
+        <div class="stat"><div class="k">正答率</div><div class="v" id="acc">0%</div></div>
+        <div class="stat"><div class="k">タイム</div><div class="v" id="time">--</div></div>
+      </div>
+
+      <div class="log" id="log"></div>
+
+      <div class="hint">
+        ※ 級プリセットは「練習用の目安」です（公式仕様と完全一致ではありません）。
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+
+  const sorobanEl = $("soroban");
+  const displayEl = $("display");
+  const subEl = $("sub");
+  const statePill = $("statePill");
+  const resultEl = $("result");
+  const logEl = $("log");
+
+  const startBtn = $("startBtn");
+  const checkBtn = $("checkBtn");
+  const resetBtn = $("resetBtn");
+
+  const modeEl = $("mode");
+  const digitsEl = $("digits");
+  const gradeEl = $("grade");
+  const speedEl = $("speed");
+  const termsEl = $("terms");
+  const voiceOnEl = $("voiceOn");
+  const unitEl = $("unit");
+  const opModeEl = $("opMode");
+  const autoNextEl = $("autoNext");
+  const autoNextDelayEl = $("autoNextDelay");
+
+  const streakEl = $("streak");
+  const correctEl = $("correct");
+  const attemptsEl = $("attempts");
+  const accEl = $("acc");
+  const timeEl = $("time");
+
+  let RODS = 9; // soroban always shows full 9 rods
+  let activeDigits = 7; // how many digits the problem uses (right-aligned)
+  let PLACE_LABELS = [];
+  let rods = [];
+
+  let target = 0;
+  let attempts = 0, correct = 0, streak = 0;
+  let startTime = 0;
+
+  let mitoriSeq = [];
+  let mitoriRunning = false;
+  let yomiageRunning = false;
+  let paused = false;
+  let spaceSkip = false;
+  let abortFlag = false;
+
+  function setState(t){ statePill.textContent = t; }
+  function fmtMs(ms){ return (ms/1000).toFixed(2) + "s"; }
+  function log(line){
+    const div = document.createElement("div");
+    div.className = "logline";
+    div.textContent = line;
+    logEl.prepend(div);
+  }
+  function syncStats(lastMs){
+    streakEl.textContent = String(streak);
+    correctEl.textContent = String(correct);
+    attemptsEl.textContent = String(attempts);
+    accEl.textContent = attempts ? Math.round((correct/attempts)*100) + "%" : "0%";
+    timeEl.textContent = lastMs ? fmtMs(lastMs) : "--";
+  }
+  function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+  function makePlaceLabels(rodCount){
+    if (rodCount === 1) return ["一"];
+    if (rodCount === 2) return ["十","一"];
+    if (rodCount === 3) return ["百","十","一"];
+    if (rodCount === 5) return ["万","千","百","十","一"];
+    if (rodCount === 7) return ["百万","十万","万","千","百","十","一"];
+    return [];
+  }
+  function makePlaceLabels9(){
+    return ["億","千万","百万","十万","万","千","百","十","一"];
+  }
+
+  function rebuildRods(newCount){
+    RODS = newCount;
+    PLACE_LABELS = (RODS === 9) ? makePlaceLabels9() : makePlaceLabels(RODS);
+    rods = Array.from({length: RODS}, () => ({ upperActive:false, lowerCount:0 }));
+    sorobanEl.style.gridTemplateColumns = `repeat(${RODS}, 1fr)`;
+    render();
+    resetAll(false);
+    displayEl.style.fontSize = (RODS === 9) ? "38px" : "44px";
+  }
+
+  function computeValue(){
+    let v = 0;
+    for (let i=0; i<RODS; i++){
+      const digit = (rods[i].upperActive ? 5 : 0) + rods[i].lowerCount;
+      v = v * 10 + digit;
+    }
+    return v;
+  }
+
+  function resetAll(clearResult=true){
+    for (let i=0;i<RODS;i++){
+      rods[i].upperActive = false;
+      rods[i].lowerCount = 0;
+    }
+    render();
+    if (clearResult) resultEl.style.display = "none";
+    setState("待機中");
+  }
+
+  function maxValueForRods(){
+    // Maximum representable on the displayed soroban (9 rods)
+    return Math.pow(10, RODS) - 1;
+  }
+
+  function newMatchQuestion(){
+    // For "数字合わせ", limit the target by the selected problem digits (activeDigits)
+    const maxTarget = Math.pow(10, activeDigits) - 1;
+    const max = Math.min(maxValueForRods(), maxTarget);
+    let n = (Math.random() * (max+1)) | 0;
+    if (n === 0 && Math.random() < 0.7) n = Math.min(max, 1000 + ((Math.random()*999000)|0));
+    target = n;
+    displayEl.textContent = target.toLocaleString("ja-JP");
+    subEl.textContent = "出題の数と同じになるように、そろばんを作って「判定」。";
+    resultEl.style.display = "none";
+    setState("出題中");
+    startTime = performance.now();
+    log(`数字合わせ: 問題${activeDigits}桁（表示9桁） / target=${target}`);
+  }
+
+  function renderResult(ok, your, ms){
+    resultEl.style.display = "block";
+    resultEl.className = "result " + (ok ? "good" : "bad");
+    if (ok){
+      resultEl.innerHTML = `✅ 正解！ <b>${your.toLocaleString("ja-JP")}</b>　<span style="color:rgba(233,238,255,.65)">(${fmtMs(ms)})</span>`;
+    } else {
+      resultEl.innerHTML = `❌ ちがう！ あなた: <b>${your.toLocaleString("ja-JP")}</b> / 正解: <b>${target.toLocaleString("ja-JP")}</b>`;
+    }
+  }
+
+  function check(){
+    if (mitoriRunning || yomiageRunning) return;
+    const v = computeValue();
+    const ms = performance.now() - startTime;
+    attempts++;
+    const ok = (v === target);
+    if (ok){ correct++; streak++; } else { streak = 0; }
+    renderResult(ok, v, ms);
+    syncStats(ms);
+    setState(ok ? "正解" : "不正解");
+    log(`結果: ${ok?"OK":"NG"} / your=${v} / target=${target}`);
+    // 判定後に自動で次の問題へ（表示を少し見せてから）
+    if (autoNextEl && autoNextEl.checked){
+      const delay = clamp(parseInt(autoNextDelayEl?.value || "900", 10) || 0, 0, 5000);
+      setState("次へ");
+      setTimeout(() => {
+        // 連打や状態のズレ防止：いったん結果表示は残しつつ新規開始
+        startBtn.click();
+      }, delay);
+    }
+  }
+
+  function onUpperClick(rodIndex){
+    rods[rodIndex].upperActive = !rods[rodIndex].upperActive;
+    render();
+  }
+  function onLowerClick(rodIndex, beadIndex){
+    const want = beadIndex + 1;
+    rods[rodIndex].lowerCount = (rods[rodIndex].lowerCount >= want) ? beadIndex : want;
+    render();
+  }
+
+  // Layout tuning for the photo-like balance (beam higher):
+  // keep upper beads closer to the top and lower beads with more room below.
+  const U_IDLE = 10, U_ACTIVE = 28;
+  // 下珠が重ならないように間隔を広げる（%ベースでも十分に離す）
+  // bead高さを下げた上で、idle/activeの位置差も明確に。
+  const L_ACTIVE = [42, 49, 56, 63];
+  const L_IDLE   = [66, 72, 78, 84];
+
+  function render(){
+    sorobanEl.innerHTML = "";
+    for (let i=0; i<RODS; i++){
+      const rod = document.createElement("div");
+      rod.className = "rod";
+
+
+      const bar = document.createElement("div");
+      bar.className = "bar";
+      rod.appendChild(bar);
+
+      const upper = document.createElement("div");
+      upper.className = "bead upperBead" + (rods[i].upperActive ? " active" : "");
+      upper.textContent = "5";
+      upper.title = "上珠（5）";
+      upper.style.top = (rods[i].upperActive ? U_ACTIVE : U_IDLE) + "%";
+      upper.addEventListener("click", () => onUpperClick(i));
+      rod.appendChild(upper);
+
+      for (let b=0; b<4; b++){
+        const bead = document.createElement("div");
+        const active = (rods[i].lowerCount >= (b+1));
+        bead.className = "bead lowerBead" + (active ? " active" : "");
+        bead.textContent = "1";
+        bead.title = "下珠（1）";
+        bead.style.top = (active ? L_ACTIVE[b] : L_IDLE[b]) + "%";
+        bead.addEventListener("click", () => onLowerClick(i, b));
+        rod.appendChild(bead);
+      }
+
+      const label = document.createElement("div");
+      label.className = "digitLabel";
+      label.textContent = PLACE_LABELS[i] || "";
+      rod.appendChild(label);
+
+      sorobanEl.appendChild(rod);
+    }
+  }
+
+  function genTerm(digits){
+    digits = clamp(digits, 1, 9);
+    const min = Math.pow(10, digits-1); // 1..9 for 1 digit
+    const max = Math.pow(10, digits) - 1;
+    return (Math.random() * (max - min + 1) + min) | 0;
+  }
+
+  function buildMitoriSeq(cfg){
+    const { terms, rodsDigits, opMode } = cfg;
+    const allowMinus = (opMode !== "add");
+    const out = [];
+    let sum = 0;
+    const max = maxValueForRods();
+
+    for (let i=0; i<terms; i++){
+      let n = genTerm(Math.min(rodsDigits, 4));
+      if (allowMinus && i > 0){
+        const wantMinus = Math.random() < 0.45;
+        if (wantMinus){
+          if (sum >= n) n = -n;
+          else {
+            const small = Math.min(sum, 9);
+            if (small >= 1 && Math.random() < 0.35) n = -(((Math.random()*small)|0) || 1);
+          }
+        }
+      }
+      if (sum + n < 0) n = -sum;
+      if (sum + n > max) n = max - sum;
+
+      // Avoid 0 terms (no "0円なり")
+      if (n === 0){
+        if (!allowMinus){
+          // add-only: n must be positive; try smallest that fits
+          n = (sum < max) ? 1 : 0;
+        } else {
+          // add/sub: prefer -1 if possible else +1
+          if (sum > 0) n = -1;
+          else if (sum < max) n = 1;
+        }
+      }
+      if (n === 0){
+        // if still zero (edge case: sum==0==max), keep 0 but it will be skipped by generator
+      }
+
+      sum += n;
+      if (n === 0){
+        // Edge case: we hit the soroban max; try again (or stop if truly impossible)
+        if (sum >= max){
+          // cannot represent more on 9 rods
+          break;
+        }
+        i--; // retry
+        continue;
+      }
+      out.push(n);
+    }
+    return { seq: out, target: sum };
+  }
+
+  function readCfg(){
+    const speed = clamp(parseInt(speedEl.value||"650",10), 150, 3000);
+    const terms = clamp(parseInt(termsEl.value||"12",10), 2, 60);
+    speedEl.value = String(speed);
+    termsEl.value = String(terms);
+    return { speed, terms };
+  }
+
+  
+  // ===== Speech (読み上げ) =====
+  function canSpeak(){
+    return !!(window.speechSynthesis && window.SpeechSynthesisUtterance);
+  }
+
+  function pickJapaneseVoice(){
+    const voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+    const ja = voices.find(v => (v.lang || "").toLowerCase().startsWith("ja"));
+    return ja || null;
+  }
+
+  // Async speech helper: waits until the phrase finishes speaking.
+  // If voice is off or unsupported, resolves immediately.
+  let __currentUtter__ = null;
+  function speakTextAsync(text){
+    if (!voiceOnEl || !voiceOnEl.checked) return Promise.resolve();
+    if (!canSpeak()) return Promise.resolve();
+    return new Promise((resolve) => {
+      try{
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = "ja-JP";
+        const v = pickJapaneseVoice();
+        if (v) u.voice = v;
+        u.rate = 1.15;
+        u.pitch = 1.0;
+        u.volume = 1.0;
+
+        __currentUtter__ = u;
+        u.onend = () => { __currentUtter__ = null; resolve(); };
+        u.onerror = () => { __currentUtter__ = null; resolve(); };
+
+        window.speechSynthesis.speak(u);
+      }catch(e){
+        __currentUtter__ = null;
+        resolve();
+      }
+    });
+  }
+
+  function cancelSpeech(){
+    if (!canSpeak()) return;
+    try{ window.speechSynthesis.cancel(); }catch(e){}
+    __currentUtter__ = null;
+  }
+
+  if (canSpeak()){
+    window.speechSynthesis.onvoiceschanged = () => { /* no-op */ };
+    window.speechSynthesis.getVoices();
+  }
+
+async function runMitori(){
+    if (mitoriRunning || yomiageRunning) return;
+    mitoriRunning = true;
+    abortFlag = false; paused = false; spaceSkip = false;
+
+    resultEl.style.display = "none";
+    resetAll(false);
+    setState("見取り算中");
+    subEl.textContent = "＋/−が流れます。そろばんで追ってください（P:停止 / Space:早送り / Esc:中断）";
+
+    const cfg = readCfg();
+    const built = buildMitoriSeq({ terms: cfg.terms, rodsDigits: activeDigits, opMode: (opModeEl ? opModeEl.value : "addsub") });
+    mitoriSeq = built.seq;
+    target = built.target;
+
+    log(`見取り算: 問題${activeDigits}桁（表示9桁） / 口数=${cfg.terms} / 表示=${cfg.speed}ms / target=${target}`);
+
+    displayEl.textContent = "3"; await sleep(220);
+    displayEl.textContent = "2"; await sleep(220);
+    displayEl.textContent = "1"; await sleep(220);
+    displayEl.textContent = "GO"; await sleep(160);
+
+    startTime = performance.now();
+
+    for (let i=0; i<mitoriSeq.length; i++){
+      if (abortFlag) break;
+      while (paused && !abortFlag) await sleep(60);
+      if (abortFlag) break;
+
+      const n = mitoriSeq[i];
+      const s = (n >= 0 ? "+" : "−") + Math.abs(n).toString();
+      displayEl.textContent = s;
+      subEl.textContent = `第 ${i+1} / ${mitoriSeq.length} 口（P:停止 / Space:早送り / Esc:中断）`;
+
+      let elapsed = 0;
+      const step = 20;
+      while (elapsed < cfg.speed && !abortFlag){
+        while (paused && !abortFlag) await sleep(60);
+        if (abortFlag) break;
+        await sleep(step);
+        elapsed += step;
+        if (spaceSkip){ spaceSkip = false; break; }
+      }
+      displayEl.textContent = " ";
+      await sleep(45);
+    }
+
+    if (abortFlag){
+      setState("中断");
+      displayEl.textContent = "STOP";
+      subEl.textContent = "中断しました。開始（N）で再スタート。";
+      mitoriRunning = false;
+      return;
+    }
+
+    setState("解答");
+    displayEl.textContent = "?";
+    subEl.textContent = "合計をそろばんで作って Enter で判定。";
+    mitoriRunning = false;
+  }
+
+
+  async function runYomiage(){
+    if (yomiageRunning) return;
+    yomiageRunning = true;
+    abortFlag = false; paused = false; spaceSkip = false;
+    cancelSpeech();
+
+    resultEl.style.display = "none";
+    resetAll(false);
+    setState("読み上げ中");
+
+    const cfg = readCfg();
+    const unit = unitEl ? unitEl.value : "yen";
+
+    subEl.textContent = "そろばん式に読み上げます（P:停止 / Space:早送り / Esc:中断）";
+
+    const built = buildMitoriSeq({ terms: cfg.terms, rodsDigits: activeDigits, opMode: (opModeEl ? opModeEl.value : "addsub") });
+    mitoriSeq = built.seq;
+    target = built.target;
+
+    log(`読み上げ算: 問題${activeDigits}桁（表示9桁） / 口数=${cfg.terms} / 間隔=${cfg.speed}ms / target=${target} (${unit==="yen"?"円":""})`);
+
+    const unitKana = (unit === "yen") ? "えん" : "";
+
+    // Countdown (display only)
+    displayEl.textContent = "3"; await sleep(180);
+    displayEl.textContent = "2"; await sleep(180);
+    displayEl.textContent = "1"; await sleep(180);
+    displayEl.textContent = "GO"; await sleep(140);
+
+    startTime = performance.now();
+
+    // Opening
+    displayEl.textContent = "ねがいまして";
+    await speakTextAsync("ねがいまして");
+    await sleep(120);
+
+    // Reading state
+    let hadAnyMinus = false;
+    let inMinusBlock = false;          // currently reading a consecutive minus block
+    let needAddEte = false;            // after a minus block, first plus gets 「加えて」 once
+    const lastIdx = mitoriSeq.length - 1;
+
+    for (let i=0; i<mitoriSeq.length; i++){
+      if (abortFlag) break;
+
+      while (paused && !abortFlag) await sleep(60);
+      if (abortFlag) break;
+
+      const n = mitoriSeq[i];
+      const abs = Math.abs(n);
+
+      // Decide block transitions
+      if (n < 0){
+        hadAnyMinus = true;
+        if (!inMinusBlock){
+          inMinusBlock = true;         // starting a minus block
+        }
+        // while in minus block, we do not set needAddEte yet; set when we leave it
+      } else {
+        // plus
+        if (inMinusBlock){
+          inMinusBlock = false;        // leaving minus block
+          needAddEte = true;           // first plus after minus uses 「加えて」
+        }
+      }
+
+      const isLast = (i === lastIdx);
+      const tail = isLast ? "では" : "なり";
+      // Core term without prefix
+      // Example: 「21えんなり」 or 「21えんでは」
+      const core = `${abs}${unitKana}${tail}`;
+
+      let phrase = "";
+      if (n < 0){
+        // minus term
+        // If this is the first minus in a minus block => prefix once
+        const isFirstMinusInBlock = (i === 0) || (mitoriSeq[i-1] >= 0);
+        phrase = isFirstMinusInBlock ? `ひいては${core}` : core;
+      } else {
+        // plus term
+        if (!hadAnyMinus){
+          // before any minus appeared: never use 「加えて」
+          phrase = core;
+        } else {
+          // after a minus has appeared at least once:
+          if (needAddEte){
+            phrase = `加えて${core}`;
+            needAddEte = false;
+          } else {
+            phrase = core;
+          }
+        }
+      }
+
+      // Display: show only number(+unit) without prefixes, keep consistent
+      displayEl.textContent = (unit === "yen")
+        ? `${abs.toLocaleString("ja-JP")}円`
+        : `${abs.toLocaleString("ja-JP")}`;
+
+      subEl.textContent = `第 ${i+1} / ${mitoriSeq.length} 口（P:停止 / Space:早送り / Esc:中断）`;
+
+      const t0 = performance.now();
+      await speakTextAsync(phrase);
+
+      // Wait remaining time, allow skip/pause/abort
+      let elapsed = performance.now() - t0;
+      let remain = Math.max(0, cfg.speed - elapsed);
+      const step = 20;
+      while (remain > 0 && !abortFlag){
+        while (paused && !abortFlag) await sleep(60);
+        if (abortFlag) break;
+        if (spaceSkip){
+          spaceSkip = false;
+          cancelSpeech();
+          break;
+        }
+        await sleep(step);
+        remain -= step;
+      }
+
+      displayEl.textContent = " ";
+      await sleep(40);
+    }
+
+    if (abortFlag){
+      setState("中断");
+      cancelSpeech();
+      displayEl.textContent = "STOP";
+      subEl.textContent = "中断しました。開始（N）で再スタート。";
+      yomiageRunning = false;
+      return;
+    }
+
+    // After last term already said "...では", go to answer
+    setState("解答");
+    displayEl.textContent = "?";
+    subEl.textContent = "合計をそろばんで作って Enter で判定。";
+    yomiageRunning = false;
+  }
+
+    function togglePause(){
+    if (!mitoriRunning && !yomiageRunning) return;
+    paused = !paused;
+    if (yomiageRunning){
+      setState(paused ? "一時停止" : "読み上げ中");
+      if (canSpeak()){
+        try{ paused ? window.speechSynthesis.pause() : window.speechSynthesis.resume(); }catch(e){}
+      }
+    } else {
+      setState(paused ? "一時停止" : "見取り算中");
+    }
+  }
+  function abortMitori(){
+    if (!mitoriRunning && !yomiageRunning) return;
+    abortFlag = true;
+    paused = false;
+    cancelSpeech();
+  }
+
+  const GRADE_PRESETS = {
+    "10": { digits:3, terms:6,  speed:900 },
+    "9":  { digits:3, terms:8,  speed:850 },
+    "8":  { digits:3, terms:10, speed:800 },
+    "7":  { digits:5, terms:10, speed:760 },
+    "6":  { digits:5, terms:12, speed:720 },
+    "5":  { digits:5, terms:14, speed:680 },
+    "4":  { digits:7, terms:14, speed:640 },
+    "3":  { digits:7, terms:16, speed:600 },
+    "2":  { digits:7, terms:18, speed:560 },
+    "1":  { digits:9, terms:18, speed:520 },
+  };
+
+  function applyGrade(grade){
+    const p = GRADE_PRESETS[String(grade)];
+    if (!p) return;
+    modeEl.value = "mitori";
+    digitsEl.value = String(p.digits);
+    speedEl.value = String(p.speed);
+    termsEl.value = String(p.terms);
+    activeDigits = p.digits;
+    rebuildRods(9);
+    digitsEl.value = String(activeDigits);
+    render();
+    subEl.textContent = `級プリセット：${grade}級（見取り算）に設定しました（問題${activeDigits}桁 / そろばん9桁固定）。開始で出題。`;
+    log(`プリセット: ${grade}級 -> ${p.digits}桁 / 口数${p.terms} / ${p.speed}ms`);
+  }
+
+  startBtn.addEventListener("click", () => {
+    resultEl.style.display = "none";
+    abortMitori();
+    resetAll(false);
+    const mode = modeEl.value;
+    if (mode === "match") { newMatchQuestion(); return; }
+    if (mode === "mitori") { runMitori(); return; }
+    if (mode === "yomiage") { runYomiage(); return; }
+  });
+
+  checkBtn.addEventListener("click", check);
+  resetBtn.addEventListener("click", () => { abortMitori(); resetAll(); subEl.textContent = "全部0に戻しました。"; });
+
+  digitsEl.addEventListener("change", () => {
+    gradeEl.value = "custom";
+    activeDigits = parseInt(digitsEl.value,10);
+    activeDigits = clamp(activeDigits, 1, 9);
+    // keep soroban rods fixed; just change which rods are used for problems
+    render();
+    subEl.textContent = `問題の桁数を ${activeDigits}桁 に変更しました（そろばん表示は9桁固定）。`;
+  });
+
+  gradeEl.addEventListener("change", () => {
+    const g = gradeEl.value;
+    if (g === "custom") return;
+    applyGrade(g);
+  });
+
+  modeEl.addEventListener("change", () => {
+    gradeEl.value = "custom";
+    subEl.textContent = (modeEl.value === "match")
+      ? "数字合わせ：表示された数をそろばんで作って判定。"
+      : (modeEl.value === "mitori")
+        ? "見取り算：＋/−が流れます。そろばんで追って最後に判定。"
+        : "読み上げ算：そろばん式（「ねがいまして…○円なり…ひいては…加えて…では」）で読み上げます。";
+  });
+
+  window.addEventListener("keydown", (e) => {
+    if (e.code === "Space" && (mitoriRunning || yomiageRunning)){
+      e.preventDefault(); spaceSkip = true; return;
+    }
+    if (e.code === "KeyP" && (mitoriRunning || yomiageRunning)){
+      e.preventDefault(); togglePause(); return;
+    }
+    if (e.key === "Enter"){
+      e.preventDefault(); check(); return;
+    }
+    if (e.key === "n" || e.key === "N"){
+      e.preventDefault(); startBtn.click(); return;
+    }
+    if (e.key === "r" || e.key === "R"){
+      e.preventDefault(); resetBtn.click(); return;
+    }
+    if (e.key === "Escape" && (mitoriRunning || yomiageRunning)){
+      e.preventDefault();
+      abortMitori();
+      setState("中断");
+      displayEl.textContent = "STOP";
+      subEl.textContent = "中断しました。開始（N）で再スタート。";
+    }
+  });
+
+  // init
+  activeDigits = parseInt(digitsEl.value,10);
+  rebuildRods(9);
+  resetAll();
+  newMatchQuestion();
+  syncStats();
+})();
+</script>
+</body>
+</html>
