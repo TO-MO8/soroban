@@ -26,6 +26,8 @@
     .pill{display:inline-block; padding:2px 10px; border-radius:999px; font-size:12px; border:1px solid var(--line); color:var(--muted);}
     .big{margin-top:10px; background:rgba(0,0,0,.18); border:1px solid var(--line); border-radius:16px; padding:12px;}
     .target{font-size:44px; font-weight:900; letter-spacing:1px; font-variant-numeric:tabular-nums; text-shadow:0 10px 35px rgba(0,0,0,.45);}
+    .target{white-space:nowrap; line-height:1.1; min-height:52px; display:flex; align-items:center;}
+
     .sub{color:var(--muted); font-size:12px; margin-top:6px; line-height:1.5;}
     .btns{display:flex; gap:10px; margin-top:12px;}
     button{flex:1; padding:12px; border-radius:14px; border:1px solid var(--line); background:rgba(0,0,0,.18); color:var(--text); cursor:pointer; font-weight:800;}
@@ -1190,7 +1192,7 @@ async function runMitori(){
         elapsed += step;
         if (spaceSkip){ spaceSkip = false; break; }
       }
-      displayEl.textContent = " ";
+      displayEl.textContent = "\u00A0";
       await sleep(45);
     }
 
@@ -1329,7 +1331,7 @@ async function runMitori(){
         remain -= step;
       }
 
-      displayEl.textContent = " ";
+      displayEl.textContent = "\u00A0";
       await sleep(40);
     }
 
