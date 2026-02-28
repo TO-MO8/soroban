@@ -196,6 +196,46 @@ body.fx-bad .flashBad{opacity:1}
   #flashScreen .flashBtns .bigBtn{min-width:150px}
   #flashScreen .mini{color:rgba(255,255,255,.80); font-size:14px}
 
+
+  /* ==== Mobile fixes (Flash buttons visible) ==== */
+  @media (max-width: 600px), (max-height: 720px){
+    /* allow scrolling within the full-screen flash screen */
+    #flashScreen .flashStage{
+      justify-content:flex-start;
+      overflow-y:auto;
+      -webkit-overflow-scrolling:touch;
+      padding-bottom:140px; /* room for sticky buttons */
+    }
+    #flashScreen .flashDisplayBox{
+      min-height:42vh;
+    }
+    /* keep flash buttons always reachable */
+    #flashScreen .flashBtns{
+      position:sticky;
+      bottom:0;
+      left:0; right:0;
+      width:100%;
+      padding:10px 0 calc(10px + env(safe-area-inset-bottom));
+      background:rgba(8,10,14,.86);
+      backdrop-filter: blur(8px);
+      border-top:1px solid rgba(255,255,255,.12);
+      margin-top:12px;
+      z-index:5;
+    }
+    /* main-screen bottom action bar: keep above system UI */
+    .canvasBar{
+      bottom:0;
+      padding:10px 10px calc(10px + env(safe-area-inset-bottom));
+      background:rgba(15,18,24,.70);
+      backdrop-filter: blur(8px);
+      border-radius:18px;
+      border:1px solid rgba(255,255,255,.10);
+    }
+    /* reduce huge number a bit on small screens */
+    #target{font-size:50px}
+    #flashAns{width:min(240px, 80vw)}
+  }
+
 </style>
 </head>
 <body>
@@ -280,6 +320,15 @@ body.fx-bad .flashBad{opacity:1}
         <label class="hint" style="display:flex;align-items:center;gap:8px;">
           <input id="adaptive" type="checkbox" checked style="width:auto; padding:0;"/>
           やさしめ自動加速
+        </label>
+
+
+        <label class="hint" style="display:flex;align-items:center;gap:8px;">
+          <input id="bathMode" type="checkbox" style="width:auto; padding:0;"/>
+          お風呂モード
+        </label>
+        <label class="hint">自動次へ(秒)
+          <input id="bathSec" type="number" min="3" step="1" value="12" />
         </label>
 </div>
       <div class="hudRow" style="margin-top:8px;">
@@ -427,6 +476,8 @@ body.fx-bad .flashBad{opacity:1}
   const elVoiceRateVal = document.getElementById("voiceRateVal");
   const elAddOnly = document.getElementById("addOnly");
   const elAdaptive = document.getElementById("adaptive");
+  const elBathMode = document.getElementById("bathMode");
+  const elBathSec  = document.getElementById("bathSec");
   const elFlashWrap = document.getElementById("flashWrap");
   const elFlashAns = document.getElementById("flashAns");
   const btnCheck = document.getElementById("btnCheck");
@@ -829,6 +880,9 @@ const rodCount = 10;
   function formatTarget(n){ return (typeof n==="number") ? n.toLocaleString("ja-JP") : String(n); }
 
   function newProblem(){
+    // 古い問題に紐づく自動進行が、次の問題に割り込まないようにする
+    clearBathTimer();
+    problemSeq++;
     mode = elMode.value;
 
     if(mode === "match"){
@@ -838,6 +892,7 @@ const rodCount = 10;
       setStatus("合わせてね", null);
       prepTimer();
       draw();
+      scheduleBathAdvance();
       return;
     }
 
@@ -917,6 +972,7 @@ const terms = [];
       prepTimer();
       playYomiage(terms, intervalMs);
     }
+
     draw();
   }
 
@@ -940,6 +996,51 @@ const terms = [];
     yomiageTimers = [];
     yomiageToken++;
     try{ speechSynthesis.cancel(); }catch(e){}
+  }
+
+  function isReadingNow(){
+    // 読み上げ/フラッシュ中かどうか（お風呂モードの開始タイミング制御用）
+    if(yomiageTimers && yomiageTimers.length > 0) return true;
+    try{
+      if(('speechSynthesis' in window) && (speechSynthesis.speaking || speechSynthesis.pending)) return true;
+    }catch(e){}
+    return false;
+  }
+
+
+  // ===== Bath mode (hands-free auto advance) =====
+  let bathTimer = null;
+  let problemSeq = 0; // 問題が進むたびに増やして、古いタイマー発火を無効化する
+  function clearBathTimer(){
+    if(bathTimer){ try{ clearTimeout(bathTimer); }catch(e){} bathTimer=null; }
+  }
+  function getBathSec(){
+    const v = parseInt(elBathSec && elBathSec.value, 10);
+    if(!isFinite(v) || v <= 0) return 12;
+    return clamp(v, 3, 600);
+  }
+  function scheduleBathAdvance(){
+    clearBathTimer();
+    if(!elBathMode || !elBathMode.checked) return;
+    const sec = getBathSec();
+    const mySeq = problemSeq;
+    bathTimer = setTimeout(()=>{ autoAdvanceBath(mySeq); }, sec*1000);
+  }
+  async function autoAdvanceBath(mySeq){
+    if(!elBathMode || !elBathMode.checked) return;
+    // すでに次の問題へ進んでいたら何もしない（遅延発火対策）
+    if(mySeq !== problemSeq) return;
+    // 読み上げ/フラッシュ予約を止める（競合防止）
+    clearYomiageTimers();
+    // 制限タイマーは次の問題で再セットされるので一旦止める
+    stopTimer();
+
+    // 正解を読み上げてから次へ
+    const ans = formatTarget(targetValue);
+    await speakJPAsync(`せいかいは${ans}です。つぎのもんだい。`);
+
+    // 次の問題
+    newProblem();
   }
 
   function sleep(ms){
@@ -998,6 +1099,8 @@ const terms = [];
       if(i >= terms.length){
         setTargetDisplay("？");
         setStatus("答えを入力して「判定」", null);
+        // お風呂モード：表示が終わってから指定秒数で自動「正解→次の問題」
+        scheduleBathAdvance();
         if(elFlashAns){
           try{ elFlashAns.focus(); }catch(e){}
         }
@@ -1030,13 +1133,32 @@ const terms = [];
     // ===== 読み上げルール（そろばん読み上げ算）=====
     // - 最初に「ねがいまして」
     // - 足し算: 「○円なり」
-    // - 引き算の連続: 最初の1回だけ「ひいては」、以降は付けない
-    // - 「加えて」は「ひいては」が出た後、最初のプラスにだけ付ける（1回だけ）
+    // - 引き算が続く区間: 最初のマイナスだけ「ひいては」
+    // - 「加えて」: マイナス区間の直後に来るプラスは毎回「加えて」
     // - 最後は「○円では」
-    let hadMinus = false;
-    let inMinusRun = false;
-    let saidHiitewa = false;
-    let saidKuwaeteAfterMinus = false;
+    function buildYomiagePhrases(arr){
+      const out = [];
+      for(let i=0;i<arr.length;i++){
+        const v = arr[i];
+        const n = Math.abs(v);
+        const isLast = (i === arr.length - 1);
+        const suffix = isLast ? "円では" : "円なり";
+        let prefix = "";
+
+        if(i > 0){
+          const prev = arr[i-1];
+          // マイナス区間の先頭だけ「ひいては」
+          if(v < 0 && prev >= 0) prefix = "ひいては ";
+          // マイナス区間の直後のプラスは毎回「加えて」
+          if(v >= 0 && prev < 0) prefix = "加えて ";
+        }
+
+        out.push(`${prefix}${n}${suffix}`);
+      }
+      return out;
+    }
+    const yomiagePhrases = buildYomiagePhrases(terms);
+
 
     // ★音声ONのときは「固定タイマーで並列発火」すると読み上げが追いつかず
     // 表示と音声がズレるので、必ず「読み上げ完了→次」を直列実行する。
@@ -1055,30 +1177,15 @@ const terms = [];
           const disp = (v>=0?`+${v}`:`${v}`);
           setTargetDisplay(disp);
 
-          const n = Math.abs(v);
-          let prefix = "";
-          if(v < 0){
-            if(!inMinusRun && i>0){
-              prefix = "ひいては ";
-              saidHiitewa = true;
-            }
-            hadMinus = true;
-            inMinusRun = true;
-          }else{
-            if(saidHiitewa && !saidKuwaeteAfterMinus){
-              prefix = "加えて ";
-              saidKuwaeteAfterMinus = true;
-            }
-            inMinusRun = false;
-          }
-          const suffix = isLast ? "円では" : "円なり";
-          await speakJPAsync(`${prefix}${n}${suffix}`);
+          await speakJPAsync(yomiagePhrases[i]);
           await sleep(Math.max(40, intervalMs));
         }
 
         if(myToken !== yomiageToken) return;
         setTargetDisplay('？');
         setStatus('答えを作って判定', null);
+        // お風呂モード：読み上げが全部終わってから指定秒数で自動「正解→次の問題」
+        scheduleBathAdvance();
       })();
       return;
     }
@@ -1094,23 +1201,14 @@ const terms = [];
       yomiageTimers.push(setTimeout(()=>{
         const disp = (v>=0?`+${v}`:`${v}`);
         setTargetDisplay(disp);
-        const n = Math.abs(v);
-        let prefix = "";
-        if(v < 0){
-          if(!inMinusRun && i>0){ prefix = "ひいては "; saidHiitewa = true; }
-          hadMinus = true;
-          inMinusRun = true;
-        }else{
-          if(saidHiitewa && !saidKuwaeteAfterMinus){ prefix = "加えて "; saidKuwaeteAfterMinus = true; }
-          inMinusRun = false;
-        }
-        const suffix = isLast ? "円では" : "円なり";
-        speakJP(`${prefix}${n}${suffix}`);
+        speakJP(yomiagePhrases[i]);
       }, t));
     }
     yomiageTimers.push(setTimeout(()=>{
       setTargetDisplay("？");
       setStatus("答えを作って判定", null);
+      // お風呂モード：表示（=読み上げ相当）が終わってから指定秒数で自動「正解→次の問題」
+      scheduleBathAdvance();
     }, startGap + terms.length * intervalMs + 30));
   }
 
@@ -1134,6 +1232,8 @@ const terms = [];
   }
 
   function checkAnswer(){
+    // 手動判定したら「お風呂モードの自動進行」を必ず止める（遅れて答え読み上げが出るバグ対策）
+    clearBathTimer();
     const isFlash = (elMode && elMode.value === "flash");
     const goNext = () => { newProblem(); startTimer(); };
 
@@ -1596,11 +1696,29 @@ const start = 0; // 全桁表示（繰り上がり対応）
   }
 
   // ========= UI =========
+
+  // Bath mode UI
+  if(elBathMode){
+    elBathMode.addEventListener("change", ()=>{
+      clearBathTimer();
+      // 途中でONにしても、読み上げが終わるまでは開始しない
+      if(!isReadingNow()) scheduleBathAdvance();
+    });
+  }
+  if(elBathSec){
+    elBathSec.addEventListener("change", ()=>{
+      // 秒数変更は次回の予約に反映
+      if(elBathMode && elBathMode.checked){
+        if(!isReadingNow()) scheduleBathAdvance();
+      }
+    });
+  }
+
   btnReset.addEventListener("click", () => { setAllZero(); draw(); playSfx('reset'); });
   btnCheck.addEventListener("click", ()=>checkAnswer());
-  btnNext.addEventListener("click", ()=>{ clearYomiageTimers(); newProblem(); });
+  btnNext.addEventListener("click", ()=>{ clearBathTimer(); clearYomiageTimers(); newProblem(); });
 
-  btnStart.addEventListener("click", ()=>{
+  btnStart.addEventListener("click", ()=>{ clearBathTimer();
     termDigits = getTermDigits();
     limitSec = +elLimit.value;
     score = 0; streak = 0; points = 0;
@@ -1620,7 +1738,8 @@ const start = 0; // 全桁表示（繰り上がり対応）
   elMode.addEventListener("change", ()=>{
     mode = elMode.value;
     termDigits = getTermDigits();
-    // モード切替時は読み上げ予約を止める
+    // モード切替時は予約を止める
+    clearBathTimer();
     clearYomiageTimers();
     // 表示を更新
     if(mode === "match") setTargetDisplay(formatTarget(targetValue));
